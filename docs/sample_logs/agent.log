@@ -1,0 +1,6 @@
+2026-05-02 10:00:00,001 INFO Agent starting server_url=http://localhost:8000 hostname=demo-laptop
+2026-05-02 10:00:00,243 INFO Registered agent_id=4d6a0f58-85b4-44c7-89f5-953efa11c651 hostname=demo-laptop
+2026-05-02 10:00:05,282 INFO Received task_id=2bb5fc10-c7b1-4bd7-bc9b-84ae3fa810f2 type=system_info
+2026-05-02 10:00:05,536 INFO Executed task_id=2bb5fc10-c7b1-4bd7-bc9b-84ae3fa810f2 type=system_info status=success
+2026-05-02 10:00:05,612 INFO Sent result task_id=2bb5fc10-c7b1-4bd7-bc9b-84ae3fa810f2 status=success
+2026-05-02 10:01:20,018 ERROR Network error: HTTPConnectionPool(host='localhost', port=8000): Read timed out.

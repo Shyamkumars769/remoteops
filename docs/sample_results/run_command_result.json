@@ -1,0 +1,11 @@
+{
+  "task_id": "a11107c2-7685-4a99-9601-6743ee2e8647",
+  "agent_id": "4d6a0f58-85b4-44c7-89f5-953efa11c651",
+  "status": "success",
+  "result": {
+    "stdout": "admin\n",
+    "stderr": "",
+    "return_code": 0,
+    "latency_ms": 91
+  }
+}

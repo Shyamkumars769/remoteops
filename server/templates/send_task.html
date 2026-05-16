@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Send Task to Agent{% endblock %}
+{% block content %}
+<h1>Send Task to Agent</h1>
+
+{% if request.query_params.get("created") %}
+<div class="notice">✅ Task created successfully!</div>
+{% endif %}
+
+{% if agents %}
+<form method="post" action="/send_task">
+
+    <label>Agent
+        <select name="agent_id" required>
+            {% for agent in agents %}
+            <option value="{{ agent.agent_id }}">
+                {{ agent.hostname }} — {{ agent.agent_id }}
+            </option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <label>Task Type
+        <input
+            type="text"
+            name="task_type"
+            id="task_type"
+            list="task_suggestions"
+            placeholder="e.g. system_info, ipconfig, whoami, dir ..."
+            required
+            oninput="toggleFields()"
+        />
+        <datalist id="task_suggestions">
+            <option value="system_info">
+            <option value="run_command">
+            <option value="list_files">
+            <option value="kill_process">
+            <option value="list_processes">
+            <option value="ipconfig">
+            <option value="whoami">
+            <option value="hostname">
+            <option value="dir">
+            <option value="tasklist">
+            <option value="netstat -an">
+            <option value="systeminfo">
+        </datalist>
+    </label>
+
+    <div id="field_command">
+        <label>Command
+            <input
+                type="text"
+                name="command"
+                id="command_input"
+                placeholder="e.g. whoami, ipconfig, dir C:\Users ..."
+            />
+        </label>
+    </div>
+
+    <div id="field_path" style="display:none;">
+        <label>Path
+            <input
+                type="text"
+                name="path"
+                placeholder="e.g. C:\Users or ."
+            />
+        </label>
+    </div>
+
+    <div id="field_pid" style="display:none;">
+        <label>PID
+            <input
+                type="number"
+                name="pid"
+                placeholder="e.g. 1234"
+            />
+        </label>
+    </div>
+
+    <button type="submit">Create Task</button>
+
+</form>
+
+{% else %}
+<div class="empty">Register an agent before creating tasks.</div>
+{% endif %}
+
+<script>
+function toggleFields() {
+    const type = document.getElementById('task_type').value.trim().toLowerCase();
+    const knownTypes = ['system_info', 'list_files', 'kill_process', 'list_processes'];
+
+    // show command field for run_command or any unknown/free-form type
+    const showCommand = !knownTypes.includes(type);
+    document.getElementById('field_command').style.display = showCommand ? 'block' : 'none';
+
+    // show path field only for list_files
+    document.getElementById('field_path').style.display =
+        type === 'list_files' ? 'block' : 'none';
+
+    // show pid field only for kill_process
+    document.getElementById('field_pid').style.display =
+        type === 'kill_process' ? 'block' : 'none';
+
+    // update placeholder to hint what will run
+    const cmdInput = document.getElementById('command_input');
+    if (showCommand && type !== 'run_command' && type !== '') {
+        cmdInput.placeholder = `Will run: ${type}`;
+    } else {
+        cmdInput.placeholder = 'e.g. whoami, ipconfig, dir C:\\Users ...';
+    }
+}
+
+// run on page load
+toggleFields();
+</script>
+{% endblock %}

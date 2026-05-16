@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Remote Platform{% endblock %}</title>
+  <style>
+    :root { color-scheme: light; --bg: #f7f8fa; --panel: #fff; --text: #1f2937; --muted: #6b7280; --line: #d9dee7; --brand: #2563eb; --ok: #047857; --warn: #b45309; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+    nav { display: flex; gap: 1rem; align-items: center; padding: 0.9rem 1.5rem; background: #111827; color: white; }
+    nav a { color: white; text-decoration: none; font-weight: 600; }
+    main { width: min(1100px, calc(100% - 2rem)); margin: 2rem auto; }
+    h1 { font-size: 1.6rem; margin: 0 0 1rem; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); }
+    th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: #eef2f7; color: #374151; }
+    input, select, button { width: 100%; padding: 0.7rem; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+    button { background: var(--brand); color: white; font-weight: 700; cursor: pointer; }
+    label { display: grid; gap: 0.35rem; color: var(--muted); font-weight: 600; }
+    form { display: grid; gap: 1rem; max-width: 720px; background: var(--panel); border: 1px solid var(--line); padding: 1rem; }
+    .status { font-weight: 700; }
+    .online { color: var(--ok); }
+    .offline { color: var(--warn); }
+    .notice { padding: 0.8rem; margin-bottom: 1rem; background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 6px; }
+    .empty { padding: 1rem; background: var(--panel); border: 1px solid var(--line); color: var(--muted); }
+  </style>
+</head>
+<body>
+  <nav>
+    <strong>Remote Platform</strong>
+    <a href="/">Home</a>
+    <a href="/tasks">Tasks</a>
+    <a href="/send_task">Send Task</a>
+    <a href="/docs">API Docs</a>
+  </nav>
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Task Results{% endblock %}
+
+{% block content %}
+<h1>Task Results</h1>
+
+{% if tasks %}
+<table>
+    <thead>
+        <tr>
+            <th>Task ID</th>
+            <th>Agent ID</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Latency</th>
+            <th>Created</th>
+            <th>Finished</th>
+            <th>Result</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for task in tasks %}
+        <tr id="row-{{ task.task_id }}">
+            <td style="font-family:monospace; font-size:0.75rem;">
+                {{ task.task_id[:8] }}...
+            </td>
+            <td style="font-family:monospace; font-size:0.75rem;">
+                {{ task.agent_id[:8] }}...
+            </td>
+            <td>
+                <span style="
+                    background:#dbeafe;
+                    color:#1d4ed8;
+                    padding:0.2rem 0.6rem;
+                    border-radius:999px;
+                    font-size:0.75rem;
+                    font-weight:600;">
+                    {{ task.type }}
+                </span>
+            </td>
+            <td>
+                {% if task.status == "completed" %}
+                    <span class="status online">✓ completed</span>
+                {% elif task.status == "failed" %}
+                    <span class="status offline">✗ failed</span>
+                {% elif task.status == "in_progress" %}
+                    <span class="status" style="color:#1d4ed8;">⟳ in progress</span>
+                {% else %}
+                    <span class="status" style="color:#b45309;">⏳ pending</span>
+                {% endif %}
+            </td>
+            <td>{{ task.latency_ms }}ms</td>
+            <td style="font-size:0.8rem;">{{ task.created_at }}</td>
+            <td style="font-size:0.8rem;">{{ task.finished_at }}</td>
+            <td>
+                <button onclick="toggleResult('{{ task.task_id }}')"
+                    style="
+                        width:auto;
+                        background:#e5e7eb;
+                        color:#1f2937;
+                        border:1px solid #d1d5db;
+                        padding:0.3rem 0.7rem;
+                        border-radius:6px;
+                        cursor:pointer;
+                        font-size:0.8rem;
+                        font-weight:600;">
+                    View
+                </button>
+                <div id="{{ task.task_id }}" style="display:none; margin-top:0.5rem;">
+                    <pre style="
+                        background:#f3f4f6;
+                        color:#065f46;
+                        padding:0.75rem;
+                        border-radius:6px;
+                        font-size:0.75rem;
+                        max-width:400px;
+                        overflow-x:auto;
+                        white-space:pre-wrap;
+                        word-break:break-all;
+                        border:1px solid #d1d5db;">{{ task.result | tojson(indent=2) }}</pre>
+                </div>
+            </td>
+            <td>
+                <button onclick="deleteTask('{{ task.task_id }}')"
+                    style="
+                        background:#e53e3e;
+                        color:white;
+                        border:none;
+                        padding:0.3rem 0.7rem;
+                        border-radius:6px;
+                        cursor:pointer;
+                        font-size:0.8rem;
+                        font-weight:600;">
+                    Delete
+                </button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty">
+    No tasks yet. Send a task from the
+    <a href="/send_task">Send Task</a> page.
+</div>
+{% endif %}
+
+<script>
+function toggleResult(taskId) {
+    const el = document.getElementById(taskId);
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function deleteTask(taskId) {
+    if (!confirm("Delete this task?")) return;
+    const res = await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+    if (res.ok) {
+        document.getElementById(`row-${taskId}`).remove();
+    } else {
+        alert("Failed to delete task.");
+    }
+}
+</script>
+{% endblock %}

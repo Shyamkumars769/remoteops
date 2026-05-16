@@ -1,0 +1,13 @@
+{
+  "task_id": "2bb5fc10-c7b1-4bd7-bc9b-84ae3fa810f2",
+  "agent_id": "4d6a0f58-85b4-44c7-89f5-953efa11c651",
+  "status": "success",
+  "result": {
+    "os": {"name": "Windows", "version": "10.0.22631", "release": "11"},
+    "hostname": "demo-laptop",
+    "cpu": {"cores": 8, "physical_cores": 4, "usage_percent": 12.5},
+    "memory": {"total": 17179869184, "available": 9448928051, "used_percent": 45.0},
+    "network": {"interfaces": {"Ethernet": ["192.168.1.50"], "Loopback": ["127.0.0.1"]}},
+    "latency_ms": 254
+  }
+}

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Registered Agents{% endblock %}
+
+{% block content %}
+<h1>Registered Agents</h1>
+
+{% if agents %}
+<table>
+    <thead>
+        <tr>
+            <th>Agent ID</th>
+            <th>Hostname</th>
+            <th>IP</th>
+            <th>Last Seen</th>
+            <th>Status</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in agents %}
+        <tr>
+            <td style="font-family:monospace; font-size:0.8rem;">{{ row.agent_id }}</td>
+            <td>{{ row.hostname }}</td>
+            <td>{{ row.ip }}</td>
+            <td>{{ row.last_seen }}</td>
+            <td>
+                {% if row.online %}
+                    <span class="badge online">online</span>
+                {% else %}
+                    <span class="badge offline">offline</span>
+                {% endif %}
+            </td>
+            <td>
+                <button onclick="deleteAgent('{{ row.agent_id }}')"
+                    style="background:#e53e3e; color:white; border:none; padding:4px 10px;
+                           border-radius:4px; cursor:pointer; font-size:0.8rem;">
+                    Delete
+                </button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p style="color:#a0aec0; margin-top:1rem;">
+    No agents registered yet. Start an agent to see it here.
+</p>
+{% endif %}
+
+<div style="margin-top:1.5rem;">
+    <a href="/send_task" class="btn">+ Send Task</a>
+</div>
+
+<script>
+  async function deleteAgent(agentId) {
+    if (!confirm("Delete this agent?")) return;
+    const res = await fetch(`/api/agents/${agentId}`, { method: "DELETE" });
+    if (res.ok) {
+      location.reload();
+    } else {
+      alert("Failed to delete agent.");
+    }
+  }
+</script>
+
+{% endblock %}
