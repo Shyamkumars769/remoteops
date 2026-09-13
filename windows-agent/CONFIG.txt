@@ -1,4 +1,0 @@
-# Edit these two values before running SETUP.bat on the other PC
-
-SERVER_URL=http://192.168.1.42:8000
-ENROLLMENT_KEY=change-me-enrollment-key
