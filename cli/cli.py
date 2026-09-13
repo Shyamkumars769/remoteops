@@ -1,108 +1,140 @@
+#!/usr/bin/env python3
+"""Operator CLI for RemoteOps Full Access."""
+from __future__ import annotations
+
 import argparse
 import json
+import os
+import sys
 import time
+from pathlib import Path
 from typing import Any
 
 import requests
 
+TOKEN_FILE = Path.home() / ".remoteops_token"
 
-def _base_url(args: argparse.Namespace) -> str:
+
+def _base(args: argparse.Namespace) -> str:
     return args.server_url.rstrip("/")
 
 
-def _print_table(rows: list[dict[str, Any]], columns: list[str]) -> None:
-    if not rows:
-        print("No records.")
-        return
-    widths = {column: max(len(column), *(len(str(row.get(column, ""))) for row in rows)) for column in columns}
-    print("  ".join(column.ljust(widths[column]) for column in columns))
-    print("  ".join("-" * widths[column] for column in columns))
-    for row in rows:
-        print("  ".join(str(row.get(column, "")).ljust(widths[column]) for column in columns))
+def _headers(args: argparse.Namespace) -> dict[str, str]:
+    token = args.token or (TOKEN_FILE.read_text().strip() if TOKEN_FILE.exists() else "")
+    if not token:
+        print("Not logged in. Run: remoteops login", file=sys.stderr)
+        sys.exit(1)
+    return {"Authorization": f"Bearer {token}"}
 
 
-def list_agents(args: argparse.Namespace) -> None:
-    response = requests.get(f"{_base_url(args)}/api/agents", timeout=10)
-    response.raise_for_status()
-    rows = response.json()
-    _print_table(rows, ["agent_id", "hostname", "ip", "last_seen"])
-
-
-def create_task(args: argparse.Namespace, task_type: str, payload: dict[str, Any]) -> str:
-    response = requests.post(
-        f"{_base_url(args)}/api/tasks",
-        json={"agent_id": args.agent_id, "type": task_type, "payload": payload},
-        timeout=10,
+def cmd_login(args: argparse.Namespace) -> None:
+    r = requests.post(
+        f"{_base(args)}/api/auth/login",
+        data={"username": args.username, "password": args.password},
+        timeout=15,
     )
-    response.raise_for_status()
-    data = response.json()
-    print(f"Created task {data['task_id']} ({data['status']})")
-    return data["task_id"]
+    r.raise_for_status()
+    data = r.json()
+    TOKEN_FILE.write_text(data["access_token"])
+    print(f"Logged in as role={data['role']}")
 
 
-def maybe_poll_result(args: argparse.Namespace, task_id: str) -> None:
-    if not args.wait:
+def cmd_list_agents(args: argparse.Namespace) -> None:
+    r = requests.get(f"{_base(args)}/api/agents", headers=_headers(args), timeout=15)
+    r.raise_for_status()
+    rows = r.json()
+    if args.json:
+        print(json.dumps(rows, indent=2, default=str))
         return
+    if not rows:
+        print("No agents.")
+        return
+    print(f"{'AGENT_ID':<38} {'HOSTNAME':<20} {'IP':<16} {'LAST_SEEN'}")
+    for a in rows:
+        print(f"{a['agent_id']:<38} {a.get('hostname',''):<20} {str(a.get('ip') or ''):<16} {a.get('last_seen')}")
+
+
+def cmd_run(args: argparse.Namespace) -> None:
+    payload = {"command": " ".join(args.command)}
+    body = {"agent_id": args.agent_id, "type": "run_command", "payload": payload}
+    r = requests.post(f"{_base(args)}/api/tasks", headers=_headers(args), json=body, timeout=15)
+    r.raise_for_status()
+    task_id = r.json()["task_id"]
+    print(f"Created task {task_id}")
+    if args.wait:
+        _wait_task(args, task_id)
+
+
+def cmd_system_info(args: argparse.Namespace) -> None:
+    body = {"agent_id": args.agent_id, "type": "system_info", "payload": {}}
+    r = requests.post(f"{_base(args)}/api/tasks", headers=_headers(args), json=body, timeout=15)
+    r.raise_for_status()
+    task_id = r.json()["task_id"]
+    print(f"Created task {task_id}")
+    if args.wait:
+        _wait_task(args, task_id)
+
+
+def cmd_session(args: argparse.Namespace) -> None:
+    r = requests.post(
+        f"{_base(args)}/api/sessions",
+        headers=_headers(args),
+        json={"agent_id": args.agent_id},
+        timeout=15,
+    )
+    r.raise_for_status()
+    sid = r.json()["session_id"]
+    print(f"Session created: {sid}")
+    print(f"Open terminal at: {_base(args)}/terminal/{sid}")
+    print("Or connect via WebSocket with your access token.")
+
+
+def _wait_task(args: argparse.Namespace, task_id: str) -> None:
     deadline = time.time() + args.timeout
     while time.time() < deadline:
-        response = requests.get(f"{_base_url(args)}/api/tasks", timeout=10)
-        response.raise_for_status()
-        for task in response.json():
-            if task["task_id"] == task_id and task["status"] in {"completed", "failed"}:
-                print(json.dumps(task, indent=2, default=str))
+        r = requests.get(f"{_base(args)}/api/tasks", headers=_headers(args), timeout=15)
+        r.raise_for_status()
+        for t in r.json():
+            if t["task_id"] == task_id and t["status"] in {"completed", "failed", "cancelled"}:
+                print(json.dumps(t, indent=2, default=str))
                 return
         time.sleep(2)
     print("Timed out waiting for result.")
 
 
-def task_system_info(args: argparse.Namespace) -> None:
-    maybe_poll_result(args, create_task(args, "system_info", {}))
-
-
-def task_run_command(args: argparse.Namespace) -> None:
-    maybe_poll_result(args, create_task(args, "run_command", {"command": " ".join(args.command_words)}))
-
-
-def task_list_files(args: argparse.Namespace) -> None:
-    maybe_poll_result(args, create_task(args, "list_files", {"path": args.path}))
-
-
-def task_kill_process(args: argparse.Namespace) -> None:
-    maybe_poll_result(args, create_task(args, "kill_process", {"pid": int(args.pid)}))
-
-
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Operator CLI for the remote systems platform.")
-    parser.add_argument("--server-url", default="http://localhost:8000")
-    subparsers = parser.add_subparsers(required=True)
+    p = argparse.ArgumentParser(description="RemoteOps operator CLI")
+    p.add_argument("--server-url", default=os.getenv("SERVER_URL", "http://localhost:8000"))
+    p.add_argument("--token", default=None)
+    sub = p.add_subparsers(required=True)
 
-    agents_parser = subparsers.add_parser("list-agents")
-    agents_parser.set_defaults(func=list_agents)
+    login = sub.add_parser("login")
+    login.add_argument("username")
+    login.add_argument("password")
+    login.set_defaults(func=cmd_login)
 
-    def add_task_common(task_parser: argparse.ArgumentParser) -> None:
-        task_parser.add_argument("agent_id")
-        task_parser.add_argument("--wait", action="store_true")
-        task_parser.add_argument("--timeout", type=int, default=60)
+    la = sub.add_parser("list-agents")
+    la.add_argument("--json", action="store_true")
+    la.set_defaults(func=cmd_list_agents)
 
-    system_parser = subparsers.add_parser("system-info")
-    add_task_common(system_parser)
-    system_parser.set_defaults(func=task_system_info)
+    run = sub.add_parser("run-command")
+    run.add_argument("agent_id")
+    run.add_argument("command", nargs="+")
+    run.add_argument("--wait", action="store_true")
+    run.add_argument("--timeout", type=int, default=120)
+    run.set_defaults(func=cmd_run)
 
-    command_parser = subparsers.add_parser("run-command")
-    add_task_common(command_parser)
-    command_parser.add_argument("command_words", nargs="+")
-    command_parser.set_defaults(func=task_run_command)
+    si = sub.add_parser("system-info")
+    si.add_argument("agent_id")
+    si.add_argument("--wait", action="store_true")
+    si.add_argument("--timeout", type=int, default=60)
+    si.set_defaults(func=cmd_system_info)
 
-    files_parser = subparsers.add_parser("list-files")
-    add_task_common(files_parser)
-    files_parser.add_argument("path")
-    files_parser.set_defaults(func=task_list_files)
+    sess = sub.add_parser("open-session")
+    sess.add_argument("agent_id")
+    sess.set_defaults(func=cmd_session)
 
-    kill_parser = subparsers.add_parser("kill-process")
-    add_task_common(kill_parser)
-    kill_parser.add_argument("pid")
-    kill_parser.set_defaults(func=task_kill_process)
-    return parser
+    return p
 
 
 def main() -> None:

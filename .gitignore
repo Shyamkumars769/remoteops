@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+db/*.sqlite
+db/*.db
+logs/*.log
+*.log
+.DS_Store
+.idea/
+.vscode/
+dist/
+build/
+*.session
+agent_state.json

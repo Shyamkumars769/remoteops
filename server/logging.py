@@ -1,30 +1,16 @@
 import logging
-from pathlib import Path
+import sys
 
+from server.config import settings
 
-def _build_logger(name: str) -> logging.Logger:
-    Path("logs").mkdir(exist_ok=True)
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
 
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-
-    if logger.handlers:
-        return logger
-
-    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-
-    file_handler = logging.FileHandler("logs/server.log")
-    file_handler.setFormatter(formatter)
-
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-    return logger
-
-
-server_logger = _build_logger("server")
-agents_logger = _build_logger("agents")
-tasks_logger = _build_logger("tasks")
+server_logger = logging.getLogger("remoteops.server")
+agents_logger = logging.getLogger("remoteops.agents")
+tasks_logger = logging.getLogger("remoteops.tasks")
+sessions_logger = logging.getLogger("remoteops.sessions")
+auth_logger = logging.getLogger("remoteops.auth")

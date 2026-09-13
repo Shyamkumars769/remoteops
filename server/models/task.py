@@ -22,3 +22,7 @@ class Task(SQLModel, table=True):
     finished_at: Optional[datetime] = None
     result: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     latency_ms: Optional[int] = None
+    created_by: Optional[str] = None
+    source_ip: Optional[str] = None
+    idempotency_key: Optional[str] = Field(default=None, index=True)
+    timeout_seconds: int = Field(default=300)

@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Terminal — RemoteOps{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+<style>
+  #term { height: 70vh; background:#000; border-radius:8px; padding:4px; }
+  .layout { display:grid; grid-template-columns: 1fr 320px; gap:1rem; }
+  @media (max-width:900px){ .layout{ grid-template-columns:1fr; } }
+  #files { font-size:0.85rem; max-height:70vh; overflow:auto; }
+  #files li { list-style:none; padding:0.25rem 0; cursor:pointer; }
+  #files li:hover { color:var(--accent); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+    <div>
+      <strong>Interactive Session</strong>
+      <span class="muted"> {{ session_id }}</span>
+      <span id="status" class="muted"> — connecting…</span>
+    </div>
+    <button class="btn btn-danger" onclick="closeSession()">Close Session</button>
+  </div>
+  <div class="layout">
+    <div id="term"></div>
+    <div class="card" style="margin:0;">
+      <strong>Files</strong>
+      <div style="margin:0.5rem 0;">
+        <input id="path" value="/" style="width:70%"/>
+        <button class="btn" onclick="listDir()">List</button>
+      </div>
+      <ul id="files"></ul>
+      <hr style="border-color:#243044"/>
+      <label>Upload to current path</label>
+      <input type="file" id="upload"/>
+      <button class="btn" onclick="uploadFile()" style="margin-top:0.4rem">Upload</button>
+    </div>
+  </div>
+</div>
+<script>
+const sessionId = "{{ session_id }}";
+const token = localStorage.getItem('access_token') || '';
+const term = new Terminal({ cursorBlink:true, fontSize:14, theme:{ background:'#000' }});
+const fit = new FitAddon.FitAddon();
+term.loadAddon(fit);
+term.open(document.getElementById('term'));
+fit.fit();
+window.addEventListener('resize', () => fit.fit());
+
+let ws;
+function connect(){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/api/ws/session/operator/${sessionId}?token=${encodeURIComponent(token)}`);
+  ws.onopen = () => {
+    document.getElementById('status').textContent = ' — connected';
+    ws.send(JSON.stringify({ type:'start_shell' }));
+    ws.send(JSON.stringify({ type:'resize', rows:term.rows, cols:term.cols }));
+  };
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if(msg.type === 'stdout') term.write(msg.data);
+    else if(msg.type === 'agent_ready') document.getElementById('status').textContent = ' — agent ready (full access)';
+    else if(msg.type === 'list_dir_result') renderFiles(msg);
+    else if(msg.type === 'download_result') downloadB64(msg);
+    else if(msg.type === 'session_closed') { document.getElementById('status').textContent = ' — closed'; term.writeln('\r\n[session closed]'); }
+    else if(msg.type === 'error') term.writeln('\r\n[error] '+msg.message);
+  };
+  ws.onclose = () => document.getElementById('status').textContent = ' — disconnected';
+}
+term.onData(data => { if(ws && ws.readyState===1) ws.send(JSON.stringify({ type:'stdin', data })); });
+term.onResize(({rows, cols}) => { if(ws && ws.readyState===1) ws.send(JSON.stringify({ type:'resize', rows, cols })); });
+
+function listDir(){
+  const path = document.getElementById('path').value || '/';
+  if(ws && ws.readyState===1) ws.send(JSON.stringify({ type:'list_dir', path }));
+}
+function renderFiles(msg){
+  const ul = document.getElementById('files');
+  ul.innerHTML = '';
+  if(msg.error){ ul.innerHTML = '<li class="muted">'+msg.error+'</li>'; return; }
+  (msg.entries||[]).forEach(e => {
+    const li = document.createElement('li');
+    li.textContent = (e.is_dir ? '📁 ' : '📄 ') + e.name + (e.size!=null ? ' ('+e.size+')' : '');
+    li.onclick = () => {
+      const base = msg.path.replace(/\/$/, '');
+      const next = base + '/' + e.name;
+      if(e.is_dir){ document.getElementById('path').value = next; listDir(); }
+      else { ws.send(JSON.stringify({ type:'download_file', path: next })); }
+    };
+    ul.appendChild(li);
+  });
+}
+function downloadB64(msg){
+  if(msg.error){ alert(msg.error); return; }
+  const bin = atob(msg.content_b64);
+  const arr = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  const blob = new Blob([arr]);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = msg.name || 'download';
+  a.click();
+}
+async function uploadFile(){
+  const f = document.getElementById('upload').files[0];
+  if(!f) return;
+  const buf = await f.arrayBuffer();
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const path = (document.getElementById('path').value.replace(/\/$/,'') + '/' + f.name);
+  ws.send(JSON.stringify({ type:'write_file', path, content:b64, encoding:'base64' }));
+  alert('Upload sent: '+path);
+}
+async function closeSession(){
+  await fetch('/api/sessions/'+sessionId+'/close', { method:'POST', headers:{ Authorization:'Bearer '+token() }});
+  if(ws) ws.close();
+  location.href='/sessions';
+}
+connect();
+listDir();
+</script>
+{% endblock %}
