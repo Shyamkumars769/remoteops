@@ -1,4 +1,4 @@
-# RemoteOps Full Access Platform v2
+# RemoteOps Full Access Platform
 
 Industrial-style remote systems management **plus unrestricted interactive control**.
 
