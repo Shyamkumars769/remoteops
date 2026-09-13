@@ -1,379 +1,340 @@
 # RemoteOps Full Access Platform
 
-Industrial-style remote systems management **plus unrestricted interactive control**.
+Remote systems management **plus full interactive control**.
 
-## Features
+One machine runs the **server** (web UI + API).  
+Other machines run the **agent** and connect to that server.
 
-### Agent Registration & Task System
-- Agent registration with enrollment key + token authentication
-- Task types: `system_info`, `run_command` (unrestricted shell), `list_files`, `list_processes`, `kill_process`
-- Free-form shell commands
-- Task audit fields, cancellation, timeouts, result size limits
-- Persistent agent identity on disk with backoff on network errors
-
-### Operator Authentication
-- JWT auth with roles: `admin` / `operator` / `viewer`
-- Access + refresh tokens
-- User management (admin-only)
-
-### Interactive Full Access
-- Open a live session on any agent
-- Real PTY shell (Unix) or subprocess shell (Windows) — type anything, it runs on the remote machine
-- File browser: list, download, upload, delete
-- Session bridge over WebSocket
-- Browser terminal (xterm.js)
-- Session list + force close
-
-### Infrastructure
-- FastAPI backend with SQLite persistence (SQLModel)
-- Web UI (Jinja2 templates, dark theme)
-- CLI operator tool
-- Docker + Docker Compose support
-- Health/readiness endpoints (`/healthz`, `/readyz`)
-- Configurable CORS via environment variables
+From the web UI you can:
+- Run tasks (`system_info`, shell commands, files, processes)
+- Open a **live interactive session** (real shell + file browser) on any online agent
 
 ---
 
-## Project Layout
+## What is in this repository
 
+GitHub contains one package:
+
+```text
+remoteops server&agent.zip
+├── remoteops-server.zip    → full server project (extract on the server PC)
+└── remoteops-agent.zip     → Windows agent pack (extract on each agent PC)
 ```
-remoteops/
-├── agent/               Core agent code (polling, task execution, sessions)
-│   ├── agent.py         Main agent loop (register, poll, execute, report)
-│   ├── config.py        Agent configuration from environment
-│   ├── logging.py       Logging setup
-│   ├── session_handler.py  PTY shell + file operations for interactive sessions
-│   └── modules/
-│       ├── executor.py      Shell command execution
-│       ├── filesystem.py    Directory listing, file read
-│       ├── process.py       Process listing, kill (psutil)
-│       └── system_info.py   OS, CPU, memory, disk, network info
-│
-├── server/              FastAPI backend
-│   ├── main.py          App entrypoint, lifespan, routes, health endpoints
-│   ├── config.py        Settings from environment/.env
-│   ├── storage.py       SQLModel engine + session factory
-│   ├── logging.py       Server loggers
-│   ├── auth/            JWT + password utilities, FastAPI dependencies
-│   │   ├── security.py  bcrypt hashing, JWT create/decode
-│   │   └── deps.py      Role-based auth dependencies
-│   ├── models/          SQLModel table definitions
-│   │   ├── user.py      User (admin/operator/viewer)
-│   │   ├── agent.py     Agent (registration, token, revocation)
-│   │   ├── task.py      Task (create, dispatch, result, audit)
-│   │   └── session.py   InteractiveSession (pending/active/closed)
-│   ├── routes/          API route handlers
-│   │   ├── auth.py      Login, refresh, user management
-│   │   ├── agents.py    Register, list, revoke agents
-│   │   ├── tasks.py     Create, poll, cancel, submit results
-│   │   └── sessions.py  Interactive sessions + WebSocket bridge
-│   └── templates/       Jinja2 HTML templates
-│       ├── base.html    Dark-themed base layout
-│       ├── index.html   Agents list + "Open Session" button
-│       ├── login.html   Login form
-│       ├── sessions.html  Session list
-│       └── terminal.html  xterm.js terminal + file browser
-│
-├── cli/                 Operator CLI tool
-│   └── cli.py           List agents, create tasks, login, sessions
-│
-├── windows-agent/       Standalone deployable agent for remote PCs
-│   ├── agent/           Same agent code as core (for standalone deployment)
-│   ├── CONFIG.txt       Server URL + enrollment key (edit before setup)
-│   ├── SETUP.bat        One-click venv + dependency setup
-│   ├── START-AGENT.bat  Launch agent (run every time)
-│   ├── BUILD-EXE.bat    Build standalone .exe with PyInstaller
-│   └── README.txt       Quick deployment instructions
-│
-├── db/                  SQLite database (created at runtime)
-├── logs/                Runtime logs (agent.log, server.log)
-├── docs/                Documentation / sample data
-├── scripts/             Utility scripts
-├── .env.example         Environment variable template
-├── .gitignore           Git ignore rules
-├── Dockerfile           Container image definition
-├── docker-compose.yml   Compose service definition
-└── requirements.txt     Python dependencies
-```
+
+You must **download and extract** these zips. The source is not checked out as loose folders on GitHub.
 
 ---
 
-## Prerequisites
+## Requirements
 
-- **Python 3.9+** (3.11+ recommended)
-- **pip** (comes with Python)
-- **Git** (for cloning)
-- **PyInstaller** (optional, only for building standalone .exe)
+| Role | Need |
+|------|------|
+| Server PC | Python 3.10+ (3.11 recommended), network reachable by agents |
+| Agent PC (Windows pack) | Python 3.10+ with **Add to PATH** checked during install |
+| Network | Same LAN (or VPN). Server port **8000** reachable from agents |
 
 ---
 
-## Quick Start (Local Development)
+# PART A — Server PC (control machine)
 
-### 1. Clone the repository
+Do everything in this section **only on the machine that will host RemoteOps**.
 
-```bash
-git clone https://github.com/Shyamkumars769/remoteops.git
-cd remoteops
+### A1. Download and extract
+
+1. Open: https://github.com/Shyamkumars769/remoteops  
+2. Download `remoteops server&agent.zip`  
+3. Extract it. Inside you will see:
+   - `remoteops-server.zip`
+   - `remoteops-agent.zip`
+4. Extract **`remoteops-server.zip`**  
+   You should get a folder named `remoteops-full` (or similar) with `server/`, `agent/`, `requirements.txt`, `.env.example`, etc.
+
+### A2. Open a terminal in the server project folder
+
+```bat
+cd path\to\remoteops-full
 ```
 
-### 2. Create a virtual environment and install dependencies
+Example:
 
-```bash
+```bat
+cd C:\Users\admin\Desktop\remoteops-full
+```
+
+### A3. Create virtual environment and install packages
+
+**Windows:**
+
+```bat
 python -m venv .venv
-# Windows:
 .venv\Scripts\activate
-# Linux/Mac:
-source .venv/bin/activate
-
 pip install -r requirements.txt
 ```
 
-### 3. Configure environment
+**Linux / macOS:**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### A4. Create `.env`
+
+**Windows:**
+
+```bat
+copy .env.example .env
+```
+
+**Linux / macOS:**
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and set at minimum:
+Open `.env` and set at least:
 
-```ini
-SECRET_KEY=<any-long-random-string>
-ENROLLMENT_KEY=<any-secret-key-for-agent-registration>
-ADMIN_PASSWORD=<your-secure-password>
+```env
+SECRET_KEY=some-long-random-string
+ENROLLMENT_KEY=change-me-enrollment-key
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=change-me-admin-password
+CORS_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
 ```
 
-> **Important:** Change `SECRET_KEY`, `ENROLLMENT_KEY`, and `ADMIN_PASSWORD` before any real use.
+**Important:**  
+- Login password = whatever you put in `ADMIN_PASSWORD`  
+- Agents must use the **same** `ENROLLMENT_KEY` later  
 
-### 4. Start the server
+If `.env.example` already has those values and you keep them, login is:
 
-```bash
+- Username: `admin`  
+- Password: `change-me-admin-password`
+
+### A5. Start the server
+
+```bat
 uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The server creates the SQLite database and bootstraps an admin user on first start.
+Leave this window open.
 
-### 5. Start an agent (on the same machine)
+You should see something like:
 
-In a **second terminal** (with the venv activated):
+```text
+Uvicorn running on http://0.0.0.0:8000
+Bootstrap admin user created: admin
+RemoteOps server started
+```
+
+### A6. Open the UI on the server
+
+Browser:
+
+```text
+http://localhost:8000/login
+```
+
+Login with the admin user from `.env`.
+
+### A7. Get this PC’s LAN IP (for agents)
+
+**Windows (Command Prompt):**
+
+```bat
+ipconfig
+```
+
+Look for **IPv4 Address**, for example `192.168.1.42`.
+
+Agents will use:
+
+```text
+http://192.168.1.42:8000
+```
+
+### A8. Allow port 8000 through Windows Firewall (server only)
+
+Run **once** in **Administrator** Command Prompt on the **server**:
+
+```bat
+netsh advfirewall firewall add rule name="RemoteOps" dir=in action=allow protocol=TCP localport=8000
+```
+
+Not required for localhost-only use. Required for other PCs on the network.
+
+### A9. Quick health check
+
+On the server:
+
+```text
+http://localhost:8000/healthz
+```
+
+Should show: `{"status":"ok"}`
+
+From another PC on the same network:
+
+```text
+http://SERVER_IP:8000/healthz
+```
+
+If that fails, fix IP / firewall before starting agents.
+
+### A10. If login fails after changing `.env`
+
+Admin is created only when the database is first created. Reset it:
+
+**Windows:**
+
+```bat
+del db\db.sqlite
+```
+
+**Linux / macOS:**
 
 ```bash
-export SERVER_URL=http://localhost:8000
-export ENROLLMENT_KEY=<same-key-from-.env>
-python -m agent.agent
+rm -f db/db.sqlite
 ```
 
-On Windows (cmd):
-```cmd
-set SERVER_URL=http://localhost:8000
-set ENROLLMENT_KEY=<same-key-from-.env>
-python -m agent.agent
-```
-
-### 6. Open the web UI
-
-Navigate to: **http://localhost:8000**
-
-- **Login:** `admin` / `<your ADMIN_PASSWORD from .env>`
-- The Agents page shows all registered agents
-- Click **Open Session** on any agent to get a live terminal + file browser
-
-### 7. API documentation
-
-Interactive API docs available at: **http://localhost:8000/docs**
+Restart the server, then login again with the password from the current `.env`.
 
 ---
 
-## Deploying Agent on Another PC (Windows)
+# PART B — Agent PC (other machine)
 
-The `windows-agent/` folder is a self-contained package for deploying agents on remote Windows machines.
+Do this on each machine you want to control.
 
-### Server PC Setup
+### B1. Copy the agent pack
 
-1. Find your server's local IP:
-   ```cmd
-   ipconfig
-   ```
-   Look for the IPv4 address (e.g., `192.168.1.42`).
+From the same `remoteops server&agent.zip` package, take **`remoteops-agent.zip`** to the other PC and extract it.
 
-2. Allow port 8000 through Windows Firewall:
-   ```cmd
-   netsh advfirewall firewall add rule name="RemoteOps" dir=in action=allow protocol=TCP localport=8000
-   ```
+You should see a folder like `windows-agent` with:
 
-3. Keep the server running (`uvicorn server.main:app ...`).
+```text
+CONFIG.txt
+SETUP.bat
+START-AGENT.bat
+agent\
+README.txt
+```
 
-### Remote PC Setup
+### B2. Edit CONFIG.txt
 
-1. **Copy** the entire `windows-agent/` folder to the remote PC.
+Open `CONFIG.txt` in Notepad and set:
 
-2. **Edit `CONFIG.txt`** with your server's IP and enrollment key:
-   ```
-   SERVER_URL=http://192.168.1.42:8000
-   ENROLLMENT_KEY=change-me-enrollment-key
-   ```
-   > `ENROLLMENT_KEY` must match the server's `.env` `ENROLLMENT_KEY` value.
+```text
+SERVER_URL=http://192.168.1.42:8000
+ENROLLMENT_KEY=change-me-enrollment-key
+```
 
-3. **Double-click `SETUP.bat`** (run once). This will:
-   - Check Python is installed
-   - Create a virtual environment
-   - Install required packages (requests, psutil, websockets, etc.)
-   - Test connection to the server
+Rules:
+- `SERVER_URL` = server LAN IP from step A7 (not `localhost` unless agent runs on the same PC)
+- `ENROLLMENT_KEY` = **exactly** the same value as in the server `.env`
 
-4. **Double-click `START-AGENT.bat`** (every time you want the agent to connect).
+### B3. Run SETUP.bat (once)
 
-The agent will appear on the server's Agents page. Open a Session for full control.
+Double-click **`SETUP.bat`**.
 
-### Building a Standalone .exe (Optional)
+It will:
+- Create a local `.venv`
+- Install required Python packages
+- Prepare `START-AGENT.bat`
 
-On the remote PC, double-click `BUILD-EXE.bat` to create `dist/remoteops-agent.exe` — a single-file executable that doesn't need Python installed.
+Needs Python installed on that PC with PATH enabled.
+
+### B4. Run START-AGENT.bat (every time)
+
+Double-click **`START-AGENT.bat`**.
+
+Leave the window open. You should see it connecting to the server URL.
+
+### B5. Confirm on the server UI
+
+On the server browser:
+
+1. Go to **Agents**
+2. The other machine’s hostname should appear
+3. Click **Open Session** for full interactive control (shell + files)
 
 ---
 
-## CLI Usage
+# PART C — Same PC (server + agent together)
 
-With the server running and venv activated:
+Useful for a quick local test.
 
-```bash
-# Login (stores token locally)
-python -m cli.cli login admin <password>
+Terminal 1 (server):
 
-# List registered agents
+```bat
+cd path\to\remoteops-full
+.venv\Scripts\activate
+uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Terminal 2 (agent):
+
+```bat
+cd path\to\remoteops-full
+.venv\Scripts\activate
+set SERVER_URL=http://127.0.0.1:8000
+set ENROLLMENT_KEY=change-me-enrollment-key
+python -m agent.agent
+```
+
+(Use the same enrollment key as in `.env`.)
+
+Then open http://localhost:8000/login
+
+---
+
+# PART D — Using the platform
+
+### Web UI
+1. Login  
+2. **Agents** — see online agents  
+3. **Open Session** — live terminal + file panel  
+4. **Sessions** — list / close sessions  
+
+### CLI (from server project folder, venv active)
+
+```bat
+python -m cli.cli login admin change-me-admin-password
 python -m cli.cli list-agents
-
-# Get system info from an agent
 python -m cli.cli system-info <agent_id> --wait
-
-# Run a command on an agent
 python -m cli.cli run-command <agent_id> whoami --wait
-
-# List files on an agent
-python -m cli.cli list-files <agent_id> . --wait
-
-# Kill a process on an agent
-python -m cli.cli kill-process <agent_id> 1234 --wait
+python -m cli.cli open-session <agent_id>
 ```
 
----
-
-## Docker
-
-### Build and run with Docker Compose
-
-```bash
-docker compose up --build
-```
-
-### Or build manually
-
-```bash
-docker build -t remoteops .
-docker run -p 8000:8000 -v ./db:/app/db -v ./logs:/app/logs remoteops
-```
-
-> Agents still run on target hosts (not inside the server container by default).
+Use your real admin password from `.env`.
 
 ---
 
-## Environment Variables
+## Troubleshooting
 
-### Server
-
-| Variable | Default | Description |
-|---|---|---|
-| `SECRET_KEY` | `dev-secret-change-me-in-production` | JWT signing secret |
-| `DATABASE_URL` | `sqlite:///./db/db.sqlite` | Database connection string |
-| `ENROLLMENT_KEY` | `dev-enrollment-key` | Key agents must provide to register |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | JWT access token lifetime |
-| `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | JWT refresh token lifetime |
-| `CORS_ORIGINS` | `http://localhost:8000,http://127.0.0.1:8000` | Comma-separated allowed origins |
-| `LOG_LEVEL` | `INFO` | Logging level |
-| `ADMIN_USERNAME` | `admin` | Default admin username (created on first start) |
-| `ADMIN_PASSWORD` | `admin123` | Default admin password |
-| `MAX_RESULT_BYTES` | `2000000` | Max task result size in bytes |
-| `SESSION_IDLE_TIMEOUT` | `1800` | Session idle timeout in seconds |
-
-### Agent
-
-| Variable | Default | Description |
-|---|---|---|
-| `SERVER_URL` | `http://localhost:8000` | Server URL to connect to |
-| `AGENT_HOSTNAME` | *(system hostname)* | Override reported hostname |
-| `ENROLLMENT_KEY` | `dev-enrollment-key` | Must match server's enrollment key |
-| `POLL_INTERVAL` | `5` | Seconds between task polls |
-| `SESSION_ENABLED` | `true` | Enable interactive session support |
+| Problem | What to do |
+|---------|------------|
+| Login failed | Password must match `.env` `ADMIN_PASSWORD`. Delete `db\db.sqlite` and restart server if you changed it after first start. |
+| Agent does not appear | Same `ENROLLMENT_KEY`; server running; `SERVER_URL` uses server LAN IP; firewall allows 8000 on server. |
+| Other PC cannot open `/healthz` | Wrong IP, or firewall not opened on server. |
+| `source` not recognized | You are on Windows — use `.venv\Scripts\activate`, not `source`. |
+| `cp` not recognized | On Windows use `copy .env.example .env`. |
+| SETUP.bat says Python not found | Install Python 3 and enable **Add Python to PATH**, then retry. |
+| Session opens but weak shell on Windows | Full PTY is strongest on Linux/macOS; task commands still work via `run_command`. |
 
 ---
 
-## Supported Task Types
+## Security notes
 
-| Type | Description | Payload |
-|---|---|---|
-| `system_info` | OS, CPU, memory, disk, network info | `{}` |
-| `run_command` | Execute shell command with timeout | `{"command": "whoami", "timeout": 30}` |
-| `list_files` | List directory contents | `{"path": "/tmp"}` |
-| `list_processes` | List running processes | `{}` |
-| `kill_process` | Terminate process by PID | `{"pid": 1234}` |
-| *(free-form)* | Any unknown type runs as shell command | `{"command": "..."}` |
+For lab / internal / authorized use only.
 
----
-
-## API Endpoints
-
-### Authentication
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/auth/login` | Login (form-encoded username/password) |
-| POST | `/api/auth/refresh` | Refresh access token |
-| GET | `/api/auth/me` | Get current user info |
-| POST | `/api/auth/users` | Create user (admin only) |
-
-### Agents
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/register` | Register new agent (enrollment key required) |
-| GET | `/api/agents` | List all active agents (viewer+) |
-| DELETE | `/api/agents/{agent_id}` | Revoke agent (admin only) |
-
-### Tasks
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/tasks` | Create task (operator+) |
-| GET | `/api/tasks` | List recent tasks (viewer+) |
-| GET | `/api/tasks/{agent_id}` | Agent polls for next task |
-| POST | `/api/results` | Agent submits task result |
-| POST | `/api/tasks/{task_id}/cancel` | Cancel task (operator+) |
-
-### Sessions
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/sessions` | Create interactive session (operator+) |
-| GET | `/api/sessions` | List sessions (viewer+) |
-| POST | `/api/sessions/{session_id}/close` | Close session (operator+) |
-| GET | `/api/sessions/pending/{agent_id}` | Agent polls for pending sessions |
-| WS | `/api/ws/session/operator/{session_id}` | Operator WebSocket bridge |
-| WS | `/api/ws/session/agent/{session_id}` | Agent WebSocket bridge |
-
-### Health
-| Method | Path | Description |
-|---|---|---|
-| GET | `/healthz` | Health check |
-| GET | `/readyz` | Readiness check (verifies DB) |
-
----
-
-## Security Notes
-
-This platform is designed for **lab / internal admin / authorized red-team** use.
-
-- Unrestricted shell and file access are **intentional**.
-- **Use TLS** in production — protect the server with a reverse proxy (nginx, Caddy).
-- **Change all default secrets** before any deployment.
-- Restrict who has `operator` / `admin` roles.
-- Only enroll agents you control.
-- Session activity should be treated as **highly privileged**.
+- Unrestricted shell and file access are intentional once a session is open.
+- Change `SECRET_KEY`, `ENROLLMENT_KEY`, and admin password before any real deployment.
+- Prefer HTTPS behind a reverse proxy for production.
+- Only enroll machines you control.
 
 ---
 
 ## Version
 
-**2.0.1** — Full interactive access + industrial auth baseline.
+Full interactive access + industrial auth baseline.
